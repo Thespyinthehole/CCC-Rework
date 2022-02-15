@@ -1,0 +1,255 @@
+Include {
+	"EasyParser/EasyParser.h";
+	"production.h";
+	"function.h";
+	"type.h";
+}
+
+Tokens {
+	ignore <whitespace> := "\\s+";
+	ignore <comment> := "##[^\\n]*\\n";
+	<keyword_include> := "Include";
+	<keyword_tokens> := "Tokens";
+	<keyword_productions> := "Productions";
+	<keyword_ignore> := "ignore";
+	<open_scope> := "\\{";
+	<close_scope> := "\\}";
+	<open_bracket> := "\\(";
+	<close_bracket> := "\\)";
+	<or> := "\\|";
+	<string> := "\"(?:\\\\\"|.)*?\"";
+	<line_end> := ";";
+	<open_triangle> := "<";
+	<close_triangle> := ">";
+	<assignment> := ":=";
+	<equal> := "=";
+	<epsilon> := "ε";
+	<arrow> := "->";
+	<colons> := "::";
+	<comma> := ",";
+	<var_name> := "[a-zA-Z_]+";
+}
+
+
+Productions {	
+	<named_token> :=
+	(
+		<open_triangle> name = <var_name> <close_triangle>
+	) -> on_named_token(name) -> std::string;
+
+	<include_triangle> := 
+	(
+		name = <named_token>
+	) -> on_include_triangle(name) -> std::string;
+
+	<include_string> :=
+	(
+		name = <string>
+	) -> on_include_string(name) -> std::string;
+
+	<include_statement> :=
+	(
+		(
+			to_include = <include_triangle> |
+			to_include = <include_string>
+		) <line_end>
+	) -> on_include_statement(to_include);
+
+	<include_statements> :=
+	(
+		(
+			<include_statement> <include_statements>
+		) | ε
+	);
+
+	<include_section> :=
+	(
+		<keyword_include> <open_scope> <include_statements> <close_scope>
+	);
+
+	<token_declaration_ignored> :=
+	(
+		<keyword_ignore> name = <named_token> <assignment> value = <string> <line_end>
+	) -> on_ignored_token_declaration(name, value);
+	
+	<token_declaration> :=
+	(
+		name = <named_token> <assignment> value = <string> <line_end>
+	) -> on_token_declaration(name, value);
+
+	<token_declarations> :=
+	(
+		(
+			(
+				<token_declaration> |
+				<token_declaration_ignored>
+			) 
+			<token_declarations>
+		) | ε
+	);
+
+	<token_section> :=
+	(
+		<keyword_tokens> <open_scope> <token_declarations> <close_scope>
+	);
+
+	<variable_named> :=
+	(
+		var = <var_name> <equal> name = <named_token>
+	) -> on_variable_named(var, name) -> std::pair<std::string, std::string>;
+
+	<non_variable_named> :=
+	(
+		name = <named_token>
+	) -> on_non_variable_named(name) -> std::pair<std::string, std::string>;
+
+	<not_variabled_named> :=
+	(
+		<epsilon>
+	) -> on_not_variabled_named() -> std::pair<std::string, std::string>;
+
+	<non_bracketed_production_expression> := 
+	(
+		var = <variable_named> | var = <non_variable_named> | var = <not_variabled_named>
+	) -> on_non_bracketed_production_expression(var) -> Prod;
+	
+	<production_expression> :=
+	(
+		(
+			production = <bracketed_production_expression> | 
+			production = <non_bracketed_production_expression>
+		)
+		extra = <extra_production>
+	) -> on_production_expression(production, extra) -> Prod;
+	
+	<bracketed_production_expression> :=
+	(
+		<open_bracket> production = <production_expression> <close_bracket>
+	) -> on_bracketed_production_expression(production) -> Prod;
+
+	<or_production_expression> :=
+	(
+		<or> production = <production_expression>
+	) -> on_or_production_expression(production) -> Prod;
+
+	<no_production_expression> :=
+	(
+		ε
+	) -> on_no_production_expression() -> Prod;
+	
+	<extra_production> :=
+	(
+		production = <or_production_expression> | 
+		production = <production_expression> | 
+		production = <no_production_expression>
+	) -> on_extra_production(production) -> Prod;
+
+
+	<no_production_function> :=
+	(
+		ε
+	) -> on_no_production_function() -> Function;
+
+	<type> :=
+	(
+		type = <var_name> last_type = <extra_type>
+	) -> on_type(type, last_type) -> TypePtr;
+
+	<triangle_type> := 
+	(
+		<open_triangle>	last_type = <type> <close_triangle>
+	) -> on_triangle_type(last_type) -> TypePtr;
+
+	<comma_type> :=
+	(
+		<comma> last_type = <type>
+	) -> on_comma_type(last_type) -> TypePtr;
+
+	<colon_type> :=
+	(
+		<colons> last_type = <type>
+	) -> on_colon_type(last_type) -> TypePtr;
+	
+	<no_type> :=
+	(
+		ε
+	) -> on_no_type() -> TypePtr;
+
+	<extra_type> :=
+	(
+		(
+			(
+				last_type = <triangle_type> |
+				last_type = <comma_type> |
+				last_type = <colon_type>		
+			)
+		) | last_type = <no_type> 
+	) -> on_extra_type(last_type) -> TypePtr;
+
+	<return_type> :=
+	(
+		(
+			<arrow>
+			type = <type> 
+		) |	type = 	<no_type>	
+	) -> on_return_type(type) -> TypePtr;
+
+	<production_function_params_end> :=
+	(
+		ε
+	) -> on_production_function_params_end() -> std::vector<std::string>;
+
+	<production_function_params> :=
+	(
+		(
+			<comma> current_params = <production_function_params_next>
+		) | current_params = <production_function_params_end>
+	) -> on_production_function_params(current_params) -> std::vector<std::string>;
+
+	<production_function_params_next> := 
+	(
+		name = <var_name> current_params = <production_function_params>
+	) -> on_production_function_params_next(name, current_params) -> std::vector<std::string>;
+
+	<production_function_params_start> :=
+	(
+		(
+			current_params = <production_function_params_next>	
+		) | current_params = <production_function_params_end>
+	)-> on_production_function_params_start(current_params) -> std::vector<std::string>;
+
+	<production_function> :=
+	(
+		(
+			<arrow> name = <var_name> <open_bracket> params = <production_function_params_start> <close_bracket> type = <return_type>
+		) 
+	) -> on_production_function(name, type, params) -> Function;
+
+	<production> :=
+	(
+		
+		name = <named_token> <assignment> <open_bracket> production = <production_expression> <close_bracket> 
+		(
+			function = <production_function> |
+			function = <no_production_function>
+		)
+		<line_end>
+	) -> on_production(name, production, function);
+
+	<productions> :=
+	(
+		(		
+			<production> <productions>
+		) | ε
+	);
+
+	<production_section> :=
+	(
+		<keyword_productions> <open_scope> <productions> <close_scope>
+	);
+
+	<program> :=
+	(
+		<include_section> <token_section> <production_section>
+	) -> on_finish();
+}

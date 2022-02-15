@@ -1,0 +1,30 @@
+{
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "C/C++: g++.exe build active file",
+            "command": "g++",
+            "args": [
+                "-g",
+                "CCC.cpp",
+                "CCC/grammar.cpp",
+                "CCC/production.cpp",
+                "CCC/EasyParser/EasyParser.cpp",
+                "CCC/EasyParser/EasyLexer/EasyLexer.cpp",
+                "-o",
+                "CCC.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ],
+    "version": "2.0.0"
+}
